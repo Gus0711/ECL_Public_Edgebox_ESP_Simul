@@ -104,6 +104,9 @@ pio run -e wokwi
 # Dans VS Code : Ctrl+Shift+P → "Wokwi: Start Simulator"
 ```
 
+<img width="1009" height="670" alt="image" src="https://github.com/user-attachments/assets/629920aa-0eb5-4d1c-a639-2ea72024ff41" />
+
+
 ### Tester le MQTT
 
 1. Connecter MQTT Explorer a `test.mosquitto.org:1883`
