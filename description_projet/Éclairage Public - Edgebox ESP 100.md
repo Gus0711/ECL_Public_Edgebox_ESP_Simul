@@ -7,8 +7,8 @@
 Piloter **3 lignes d'éclairage public** via contacteurs, avec :
 
 - Calcul astronomique du lever/coucher du soleil
-- Planning hebdomadaire configurable par ligne (4 plages horaires libres)
-- Exceptions calendaires (jours fériés, événements)
+- Planning hebdomadaire configurable par ligne (3 modes par nuit)
+- Exceptions calendaires par plage de dates (jours fériés, événements, vacances)
 - Forçage terrain avec temporisation auto-retour (90 min)
 - Supervision et configuration à distance via MQTT → Niagara 4
 - Mise à jour firmware OTA (Over-The-Air)
@@ -43,8 +43,9 @@ Piloter **3 lignes d'éclairage public** via contacteurs, avec :
 | Shunt/Forçage L1 | DI | DI0 | GPIO4 |
 | Shunt/Forçage L2 | DI | DI1 | GPIO5 |
 | Shunt/Forçage L3 | DI | DI2 | GPIO6 |
+| Bouton page LCD | DI | DI3 | GPIO7 |
 
-**I/O disponibles restantes** : DO3-DO5 (3 DO), DI3 (1 DI), AI0-AI3 (4 AI), AO0-AO1 (2 AO), RS485, CAN, Ethernet.
+**I/O disponibles restantes** : DO3-DO5 (3 DO), AI0-AI3 (4 AI), AO0-AO1 (2 AO), RS485, CAN, Ethernet.
 
 ### Connectivité terrain
 
@@ -77,14 +78,19 @@ EdgeBox-ESP-100          Opérateur M2M           Serveur OVH (Windows)
 
 ## 4. Analyse fonctionnelle
 
-### 4.1 Logique de base
+### 4.1 Logique de base — Modèle par nuit
 
-```
-ÉTAT_CONTACTEUR = AUTORISATION_PLANNING  AND  IL_FAIT_NUIT
-                  (sauf si forçage actif)
-```
+Chaque nuit (dimanche→lundi, lundi→mardi, ...) a un **mode** par ligne :
 
-L'éclairage est **autorisé** en permanence pendant la journée, mais ne s'allume que si la condition astronomique "nuit" est remplie. La coupure partielle de nuit se fait en retirant l'autorisation sur certaines plages.
+| Mode | Label | Comportement |
+| --- | --- | --- |
+| 0 | Éteint | Pas d'allumage, même s'il fait nuit |
+| 1 | Toute la nuit | Allumé du coucher au lever, aucune coupure |
+| 2 | Horaires programmés | Allumé au coucher, éteint à `extinction`, rallumé à `rallumage`, éteint au lever |
+
+Si mode 2 sans rallumage (`rallumage = 00:00`) : extinction définitive jusqu'au lever.
+
+Le forçage terrain (DI) ou distant (MQTT cmd) a priorité absolue sur le mode.
 
 ### 4.2 Calcul astronomique
 
@@ -96,40 +102,45 @@ L'éclairage est **autorisé** en permanence pendant la journée, mais ne s'allu
 
 ### 4.3 Planning hebdomadaire
 
-Chaque ligne possède sa propre configuration indépendante :
+Chaque ligne possède **7 configurations de nuit** indépendantes (une par nuit de la semaine).
 
-**4 plages horaires à bornes libres** (configurées depuis Niagara) :
+**Index des nuits** :
 
-| Plage | Exemple L1 | Exemple L2 | Exemple L3 |
+| Index | Nuit |
+| --- | --- |
+| 0 | Dimanche soir → Lundi matin |
+| 1 | Lundi soir → Mardi matin |
+| 2 | Mardi soir → Mercredi matin |
+| 3 | Mercredi soir → Jeudi matin |
+| 4 | Jeudi soir → Vendredi matin |
+| 5 | Vendredi soir → Samedi matin |
+| 6 | Samedi soir → Dimanche matin |
+
+**Exemple config L1 — Voiries** :
+
+| Nuit | Mode | Extinction | Rallumage |
 | --- | --- | --- | --- |
-| P1 | 00:00 – 05:30 | 00:00 – 06:00 | 00:00 – 01:00 |
-| P2 | 05:30 – 22:00 | 06:00 – 21:00 | 01:00 – 18:00 |
-| P3 | 22:00 – 23:30 | 21:00 – 23:00 | 18:00 – 23:00 |
-| P4 | 23:30 – 00:00 | 23:00 – 00:00 | 23:00 – 00:00 |
+| Dim→Lun | 1 (toute la nuit) | — | — |
+| Lun→Mar | 2 (horaires) | 23:30 | 05:30 |
+| Mar→Mer | 2 (horaires) | 23:30 | 05:30 |
+| ... | ... | ... | ... |
+| Sam→Dim | 1 (toute la nuit) | — | — |
 
-**Matrice d'autorisation** [7 jours × 4 plages] par ligne :
-
-|  | P1 | P2 | P3 | P4 |
-| --- | --- | --- | --- | --- |
-| Dim | ON | ON | ON | ON |
-| Lun | OFF | ON | ON | OFF |
-| Mar | OFF | ON | ON | OFF |
-| ... | ... | ... | ... | ... |
-
-Résultat pour L1 un lundi : allumé au coucher (~17h, plage P2=ON), éteint à 23h30 (plage P4=OFF), rallumé à 05h30 (plage P2=ON), éteint au lever (~8h).
+Résultat pour L1 un lundi : allumé au coucher (~17h), éteint à 23h30, rallumé à 05h30, éteint au lever (~8h).
 
 ### 4.4 Exceptions calendaires
 
-Dates spécifiques qui overrident le planning : toutes les plages passent à ON.
+**Plages de dates** qui overrident le planning hebdo pour les 3 lignes. Chaque exception a un mode (0/1/2), comme les nuits du planning.
 
-| Date | Description |
-| --- | --- |
-| 24/12 | Veille de Noël |
-| 25/12 | Noël |
-| 14/07 | Fête nationale |
-| 01/01 | Nouvel an |
+| Plage | Mode | Description |
+| --- | --- | --- |
+| 24/12 → 25/12 | 1 (toute la nuit) | Noël |
+| 14/07 → 14/07 | 1 (toute la nuit) | Fête nationale |
+| 01/01 → 01/01 | 1 (toute la nuit) | Nouvel an |
+| 26/12 → 02/01 | 0 (éteint) | Vacances — économies |
+| 21/06 → 21/06 | 2 (horaires) | Fête musique — ext 01:00, ral 05:00 |
 
-Liste configurable via MQTT.
+Les exceptions gèrent le chevauchement d'année (26/12 → 02/01). Maximum 10 exceptions. Liste configurable via MQTT.
 
 ### 4.5 Forçage terrain (shunt)
 
@@ -157,11 +168,11 @@ Dérive RTC sans NTP : ~2 sec/jour → négligeable pour l'éclairage public.
 
 | Direction | Topic | Fréquence | Description |
 | --- | --- | --- | --- |
-| PUB | `eclairage/{site}/status` | 30s | États complets (JSON) |
+| PUB | `eclairage/{site}/status` | 2s | États complets (JSON) |
 | SUB | `eclairage/{site}/cmd` | On demand | Forçages manuels distants |
 | SUB | `eclairage/{site}/config` | On demand | Planning complet (stocké en flash) |
 
-### 5.2 Payload STATUS (publié toutes les 30s)
+### 5.2 Payload STATUS (publié toutes les 2s)
 
 ```json
 {
@@ -169,15 +180,19 @@ Dérive RTC sans NTP : ~2 sec/jour → négligeable pour l'éclairage public.
   "night": true,
   "sun": { "rise": "08:12", "set": "16:45" },
   "dst": true,
-  "slot": [3, 2, 2],
-  "exception": false,
+  "night_index": 1,
+  "fw": "3.0.0",
   "lines": [
-    { "id": "L1", "name": "Voiries",  "auth": true,  "state": "ON",  "force": false },
-    { "id": "L2", "name": "Parkings", "auth": false, "state": "OFF", "force": false },
-    { "id": "L3", "name": "Deco",     "auth": true,  "state": "ON",  "force": true, "force_remaining": 45 }
+    { "id": "L1", "name": "Voiries",  "mode": 2, "auth": true,  "state": "ON",  "force": false, "off": "23:30", "on": "05:30" },
+    { "id": "L2", "name": "Parkings", "mode": 2, "auth": false, "state": "OFF", "force": false, "off": "23:00", "on": "06:00" },
+    { "id": "L3", "name": "Deco",     "mode": 1, "auth": true,  "state": "ON",  "force": true, "force_remaining": 45 }
   ]
 }
 ```
+
+- `night_index` : index de la nuit en cours (0=dim→lun, 1=lun→mar, ...)
+- `mode` : mode de la nuit (0/1/2)
+- `off`/`on` : heures d'extinction/rallumage (uniquement si mode 2)
 
 ### 5.3 Payload CMD (forçage distant)
 
@@ -195,21 +210,29 @@ Dérive RTC sans NTP : ~2 sec/jour → négligeable pour l'éclairage public.
   "lines": [
     {
       "name": "Voiries",
-      "plages": [{"h":0,"m":0}, {"h":5,"m":30}, {"h":22,"m":0}, {"h":23,"m":30}],
-      "planning": [
-        [true,true,true,true],
-        [false,true,true,false],
-        [false,true,true,false],
-        [false,true,true,false],
-        [false,true,true,false],
-        [false,true,true,false],
-        [true,true,true,true]
+      "nights": [
+        { "mode": 1 },
+        { "mode": 2, "off": "23:30", "on": "05:30" },
+        { "mode": 2, "off": "23:30", "on": "05:30" },
+        { "mode": 2, "off": "23:30", "on": "05:30" },
+        { "mode": 2, "off": "23:30", "on": "05:30" },
+        { "mode": 2, "off": "23:30", "on": "05:30" },
+        { "mode": 1 }
       ]
     }
   ],
-  "exceptions": [{"m":12,"d":24}, {"m":12,"d":25}, {"m":7,"d":14}, {"m":1,"d":1}]
+  "exceptions": [
+    { "from": "24/12", "to": "25/12", "mode": 1 },
+    { "from": "14/07", "to": "14/07", "mode": 1 },
+    { "from": "01/01", "to": "01/01", "mode": 1 }
+  ]
 }
 ```
+
+- `nights[]` : 7 entrées (index 0=dim→lun ... 6=sam→dim)
+- `mode` : 0=éteint, 1=toute la nuit, 2=horaires
+- `off`/`on` : heures "HH:MM" (mode 2 uniquement). Si `on` absent = pas de rallumage.
+- `exceptions` : plages de dates avec `from`/`to` au format "JJ/MM"
 
 Réception → application immédiate → sauvegarde en flash (Preferences ESP32) → persiste au reboot.
 
@@ -242,8 +265,8 @@ Le broker MQTT (Mosquitto sur le serveur OVH) fait le pont entre les EdgeBox et 
 | --- | --- | --- |
 | Calcul lever/coucher | Lookup 20 points + N° jour année | Formule NOAA trigonométrique |
 | Heure d'été | `DaylightSavingStatus` device | Calcul algorithmique EU exact |
-| Planning | Bloc `Schedule` natif BACnet | 4 plages × 7 jours × 3 lignes (MQTT/flash) |
-| Logique | `GreaterOrEqual` + `And` + `Or` | `autorisation AND nuit` (identique) |
+| Planning | Bloc `Schedule` natif BACnet | 3 modes × 7 nuits × 3 lignes (MQTT/flash) |
+| Logique | `GreaterOrEqual` + `And` + `Or` | Mode nuit (éteint/toute nuit/horaires) |
 | Forçage terrain | Toggle + Rising Edge + Stop Delay 90min | Toggle + Tempo 90min (identique) |
 | Supervision | BACnet/IP natif | MQTT → Niagara (MQTT Driver) |
 | Mise à jour | EC-NetAX / Niagara direct | OTA HTTPS |
@@ -268,10 +291,15 @@ Le broker MQTT (Mosquitto sur le serveur OVH) fait le pont entre les EdgeBox et 
 
 ## 10. Livrables
 
-- [x]  Simulation Wokwi fonctionnelle (validation logique)
-- [ ]  Firmware EdgeBox-ESP-100 (portage Arduino/ESP-IDF)
+- [x]  Simulation Wokwi fonctionnelle (validation logique v3.0.0)
+- [x]  MQTT réel (PubSubClient + ArduinoJson, testé sur test.mosquitto.org)
+- [x]  NTP Europe/Paris + support RTC PCF8563 (production)
+- [x]  OTA HTTPS (vérification toutes les 24h)
+- [x]  Dual build wokwi/edgebox avec #ifdef
+- [x]  Refactoring modèle par nuit (3 modes) + exceptions par plage de dates
+- [ ]  Test sur hardware EdgeBox-ESP-100 réel
 - [ ]  Serveur OTA (Cloudflare Workers + R2)
-- [ ]  Configuration broker MQTT (Mosquitto sur OVH)
+- [ ]  Configuration broker MQTT production (Mosquitto sur OVH)
 - [ ]  Intégration Niagara 4 (MQTT Driver + points + graphiques)
 - [ ]  Documentation de déploiement terrain
 - [ ]  Procédure de commissioning par site
