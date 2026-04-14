@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "author": "Gus - Fareneit",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-s3-devkitc-1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-lcd2004",
+      "id": "lcd",
+      "top": -260,
+      "left": 280,
+      "attrs": { "pins": "i2c" }
+    },
+    {
+      "type": "wokwi-potentiometer",
+      "id": "pot_time",
+      "top": -200,
+      "left": -300,
+      "attrs": { "value": "0" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": -50,
+      "left": -300,
+      "attrs": { "color": "green", "label": "Force L1" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn2",
+      "top": 30,
+      "left": -300,
+      "attrs": { "color": "yellow", "label": "Force L2" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn3",
+      "top": 110,
+      "left": -300,
+      "attrs": { "color": "red", "label": "Force L3" }
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn_page",
+      "top": 210,
+      "left": -300,
+      "attrs": { "color": "blue", "label": "Page LCD" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led1",
+      "top": -50,
+      "left": 240,
+      "attrs": { "color": "green", "label": "L1" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led2",
+      "top": 10,
+      "left": 240,
+      "attrs": { "color": "yellow", "label": "L2" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led3",
+      "top": 70,
+      "left": 240,
+      "attrs": { "color": "red", "label": "L3" }
+    }
+  ],
+  "connections": [
+    ["lcd:GND", "esp:GND.1", "black", ["v:10"]],
+    ["lcd:VCC", "esp:3V3", "red", ["v:10"]],
+    ["lcd:SDA", "esp:11", "blue", ["v:10"]],
+    ["lcd:SCL", "esp:12", "purple", ["v:10"]],
+
+    ["pot_time:GND", "esp:GND.1", "black", ["v:20"]],
+    ["pot_time:VCC", "esp:3V3", "red", ["v:10"]],
+    ["pot_time:SIG", "esp:4", "gray", ["v:30"]],
+
+    ["btn1:1.l", "esp:GND.1", "black", ["v:10"]],
+    ["btn1:2.l", "esp:5", "green", ["v:10"]],
+
+    ["btn2:1.l", "esp:GND.1", "black", ["v:10"]],
+    ["btn2:2.l", "esp:6", "yellow", ["v:10"]],
+
+    ["btn3:1.l", "esp:GND.1", "black", ["v:10"]],
+    ["btn3:2.l", "esp:7", "red", ["v:10"]],
+
+    ["btn_page:1.l", "esp:GND.1", "black", ["v:10"]],
+    ["btn_page:2.l", "esp:8", "blue", ["v:10"]],
+
+    ["led1:A", "esp:40", "green", ["h:20"]],
+    ["led1:C", "esp:GND.1", "black", ["h:10"]],
+
+    ["led2:A", "esp:39", "yellow", ["h:20"]],
+    ["led2:C", "esp:GND.1", "black", ["h:10"]],
+
+    ["led3:A", "esp:38", "red", ["h:20"]],
+    ["led3:C", "esp:GND.1", "black", ["h:10"]]
+  ]
+}
